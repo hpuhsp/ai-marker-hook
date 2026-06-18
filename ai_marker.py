@@ -52,52 +52,13 @@ def git_author() -> str:
     except Exception:
         return 'unknown'
 
-_VERSION_PATTERNS = [
-    ('package.json',      re.compile(r'"version"\s*:\s*"([^"]+)"')),
-    ('pom.xml',           re.compile(r'<version>([^<${}]+)</version>')),
-    ('build.gradle',      re.compile(r'version\s*=\s*[\'"]([^\'"]+)[\'"]')),
-    ('build.gradle.kts',  re.compile(r'version\s*=\s*"([^"]+)"')),
-    ('pyproject.toml',    re.compile(r'version\s*=\s*"([^"]+)"')),
-    ('gradle.properties', re.compile(r'version\s*=\s*(.+)')),
-    ('Cargo.toml',        re.compile(r'version\s*=\s*"([^"]+)"')),
-]
-
-def project_version(file_path: str) -> str:
-    search = Path(file_path).resolve().parent
-    for directory in ([search] + list(search.parents))[:6]:
-        for filename, pattern in _VERSION_PATTERNS:
-            vf = directory / filename
-            if vf.exists():
-                try:
-                    m = pattern.search(vf.read_text(encoding='utf-8'))
-                    if m:
-                        return f"v{m.group(1).strip()}"
-                except Exception:
-                    pass
-    return 'v?.?.?'
-
 # ─────────────────────────── Marker building ───────────────────────────
 
 TODAY = date.today().isoformat()
 TODAY_DATE = date.fromisoformat(TODAY)
-MODEL = (os.environ.get('CLAUDE_MODEL')
-         or os.environ.get('QODER_MODEL')
-         or os.environ.get('AI_MODEL')
-         or 'unknown-model')
-
-def _parse_cli_version() -> str | None:
-    args = sys.argv[1:]
-    for i, arg in enumerate(args):
-        if arg == '--project-version' and i + 1 < len(args):
-            return args[i + 1]
-        if arg.startswith('--project-version='):
-            return arg.split('=', 1)[1]
-    return None
-
-_CLI_VERSION = _parse_cli_version()
 
 def build_header(style: CommentStyle, change_type: str, meta: dict) -> str:
-    fields = f" | {meta['model']} | {meta['date']} | {meta['version']} | {change_type.lower()} | {meta['author']}"
+    fields = f" | {meta['model']} | {meta['date']} | {change_type.lower()} | {meta['author']}"
     if style.is_html:
         return f"<!-- === AI {change_type} BEGIN{fields} === -->"
     return f"{style.prefix} === AI {change_type} BEGIN{fields} ==="
@@ -241,11 +202,11 @@ def handle_write(file_path: str, tool_input: dict, style: CommentStyle, meta: di
 
     if style.is_html:
         marker = (f"<!-- === AI GENERATED FILE"
-                  f" | {meta['model']} | {meta['date']} | {meta['version']}"
+                  f" | {meta['model']} | {meta['date']}"
                   f" | {meta['author']} === -->\n")
     else:
         marker = (f"{style.prefix} === AI GENERATED FILE"
-                  f" | {meta['model']} | {meta['date']} | {meta['version']}"
+                  f" | {meta['model']} | {meta['date']}"
                   f" | {meta['author']} ===\n")
 
     lines.insert(insert_at, marker)
@@ -268,13 +229,11 @@ def handle_edit(file_path: str, tool_input: dict, style: CommentStyle, meta: dic
 
     pos = occurrences[0]
 
-    # Single find_enclosing_marker call covers both fresh-guard and stale-strip
     enclosing = find_enclosing_marker(content, pos, style)
     if enclosing is not None:
         b_start, e_end, marker_date = enclosing
         if TODAY_DATE - marker_date <= CUTOFF:
             return  # inside fresh marker — don't nest
-        # stale: strip marker shell, keep active code
         block = content[b_start:e_end]
         content = content[:b_start] + extract_active_code(block, style) + content[e_end:]
         occurrences = [m.start() for m in re.finditer(re.escape(new_str), content)]
@@ -335,11 +294,15 @@ def main():
     if not Path(file_path).exists():
         return
 
+    model = (os.environ.get('CLAUDE_MODEL')
+             or os.environ.get('QODER_MODEL')
+             or os.environ.get('AI_MODEL')
+             or 'claude')
+
     meta = {
-        'model':   MODEL,
-        'date':    TODAY,
-        'version': _CLI_VERSION or project_version(file_path),
-        'author':  git_author(),
+        'model':  model,
+        'date':   TODAY,
+        'author': git_author(),
     }
 
     try:
