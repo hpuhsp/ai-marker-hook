@@ -138,6 +138,25 @@ def change_ratio(old: str, new: str) -> float:
     kept = sum(n for _, _, n in matcher.get_matching_blocks())
     return 1.0 - kept / len(old_lines)
 
+def find_changed_region(old: str, new: str) -> tuple[int, int]:
+    """Return char offsets (start, end) within `new` spanning only the changed lines."""
+    old_lines = old.splitlines(keepends=True)
+    new_lines = new.splitlines(keepends=True)
+    matcher = difflib.SequenceMatcher(None, old_lines, new_lines)
+
+    first_j, last_j = len(new_lines), -1
+    for tag, _, _, j1, j2 in matcher.get_opcodes():
+        if tag != 'equal':
+            first_j = min(first_j, j1)
+            last_j  = max(last_j, j2 - 1)
+
+    if last_j < 0:
+        return 0, len(new)
+
+    start = sum(len(l) for l in new_lines[:first_j])
+    end   = sum(len(l) for l in new_lines[:last_j + 1])
+    return start, end
+
 # ─────────────────────────── Marker cleanup ───────────────────────────
 
 DATE_RE = re.compile(r'AI \w+ BEGIN\s*\|\s*[^|]+\|\s*(\d{4}-\d{2}-\d{2})\s*\|')
@@ -268,7 +287,10 @@ def handle_edit(file_path: str, tool_input: dict, style: CommentStyle, meta: dic
     elif change_ratio(old_str, new_str) >= 0.8:
         marked = wrap_replaced(old_str, new_str, style, meta)
     else:
-        marked = wrap_block(new_str, style, 'MODIFIED', meta)
+        c_start, c_end = find_changed_region(old_str, new_str)
+        marked = (new_str[:c_start]
+                  + wrap_block(new_str[c_start:c_end], style, 'MODIFIED', meta)
+                  + new_str[c_end:])
 
     Path(file_path).write_text(
         content[:pos] + marked + content[pos + len(new_str):],
