@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python /path/to/ai_marker.py"
+          }
+        ]
+      }
+    ]
+  }
+}
