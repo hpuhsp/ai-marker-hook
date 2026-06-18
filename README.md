@@ -1,22 +1,22 @@
 # ai-marker-hook
 
-AI 代码标记注入 Hook，兼容 Claude Code 和 Qoder。
+[中文](README.zh.md) | **English**
 
-当 AI Agent 生成或修改代码后，自动在对应代码块插入结构化标记注释，记录模型、日期、版本、操作类型及作者信息，用于团队 AI 使用度量与代码溯源。
+A `PostToolUse` hook for Claude Code and Qoder that automatically annotates AI-generated or AI-modified code blocks with structured authorship comments — recording the model, date, version, change type, and author. Designed for team AI usage tracking and code traceability.
 
 ---
 
-## 标记格式
+## Marker Format
 
-### 新建文件（Write）
+### New file (Write / create_file)
 
-在文件顶部插入一行文件级标记：
+A single file-level header is inserted at the top:
 
 ```java
-// === AI GENERATED FILE | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | generated | Zhang San ===
+// === AI GENERATED FILE | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | Zhang San ===
 ```
 
-### 新增代码块（Edit，无原始内容）
+### New code block (Edit with no original content)
 
 ```java
 // === AI GENERATED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | generated | Zhang San ===
@@ -26,7 +26,7 @@ public void newMethod() {
 // === AI GENERATED END ===
 ```
 
-### 修改代码（改动 < 80%）
+### Modified code (change ratio < 80%)
 
 ```python
 # === AI MODIFIED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | modified | Zhang San ===
@@ -35,9 +35,9 @@ def updated_function():
 # === AI MODIFIED END ===
 ```
 
-### 大幅重写（改动 ≥ 80%）
+### Major rewrite (change ratio ≥ 80%)
 
-原始代码被注释保留，便于对比：
+The original code is commented out inline for easy comparison:
 
 ```python
 # === AI REPLACED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | replaced | Zhang San ===
@@ -52,68 +52,71 @@ def new_function():
 
 ---
 
-## Header 字段说明
+## Header Fields
 
 ```
 === AI {TYPE} BEGIN | {model} | {date} | {version} | {type} | {author} ===
 ```
 
-| 字段 | 说明 |
-|------|------|
+| Field | Description |
+|-------|-------------|
 | `TYPE` | `GENERATED` / `MODIFIED` / `REPLACED` |
-| `model` | AI 模型名称，自动从环境变量读取 |
-| `date` | 操作日期（ISO 格式） |
-| `version` | 项目版本号，自动从版本文件读取 |
-| `type` | 同 TYPE，小写 |
+| `model` | AI model name, read from environment variables |
+| `date` | ISO-format date of the edit |
+| `version` | Project version, auto-detected from version files |
+| `type` | Same as TYPE, lowercase |
 | `author` | `git config user.name` |
 
 ---
 
-## 支持的语言
+## Supported Languages
 
-| 注释风格 | 语言 / 文件类型 |
-|----------|----------------|
+| Comment style | Languages / file types |
+|---------------|------------------------|
 | `#` | Python, Shell, Ruby, YAML, TOML, Terraform, Dockerfile |
 | `//` | Java, Kotlin, JavaScript, TypeScript, Go, Swift, C/C++, C#, PHP, Rust, Scala, Dart, Groovy |
 | `--` | SQL, Lua, Haskell, Elm |
 | `<!-- -->` | HTML, XML, Vue, SVG |
 
-不在列表中的文件类型会被跳过，不插入标记。
+Files with unlisted extensions are skipped silently.
 
 ---
 
-## 自动清理策略
+## Stale Marker Cleanup
 
-- **6 个月内**的标记：再次编辑该区域时，不重复嵌套标记。
-- **超过 6 个月**的标记：下次编辑时自动剥离旧标记外壳，保留活跃代码，重新打上新标记。
+- **Within 6 months**: re-editing a marked block does not nest a new marker.
+- **Older than 6 months**: the marker shell is stripped on the next edit, the active code is preserved, and a fresh marker is applied.
 
 ---
 
-## 安装与配置
+## Installation & Configuration
 
-### 前置要求
+### Requirements
 
 - Python 3.10+
-- 标准库，无需额外依赖
+- Standard library only, no extra dependencies
 
-### 第一步：下载脚本
+### Step 1 — Download the script
 
 ```bash
-# 用户全局目录（推荐）
+# macOS / Linux
 mkdir -p ~/.claude/hooks
 curl -o ~/.claude/hooks/ai_marker.py \
   https://raw.githubusercontent.com/hpuhsp/ai-marker-hook/main/ai_marker.py
-
-# Windows
-mkdir -p $env:USERPROFILE\.claude\hooks
-# 手动下载 ai_marker.py 到该目录
 ```
 
-### 第二步：配置 Hook
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\hooks"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/hpuhsp/ai-marker-hook/main/ai_marker.py" `
+  -OutFile "$env:USERPROFILE\.claude\hooks\ai_marker.py"
+```
 
-#### Claude Code（全局，对所有项目生效）
+### Step 2 — Register the hook
 
-编辑 `~/.claude/settings.json`：
+#### Claude Code — global (all projects)
+
+Edit `~/.claude/settings.json`:
 
 ```json
 {
@@ -124,7 +127,7 @@ mkdir -p $env:USERPROFILE\.claude\hooks
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:/Users/<你的用户名>/.claude/hooks/ai_marker.py\""
+            "command": "python \"C:/Users/<username>/.claude/hooks/ai_marker.py\""
           }
         ]
       }
@@ -133,13 +136,13 @@ mkdir -p $env:USERPROFILE\.claude\hooks
 }
 ```
 
-#### Claude Code（项目级，仅对当前项目生效）
+#### Claude Code — project-level
 
-在项目根目录创建 `.claude/settings.json`，内容同上。
+Create `.claude/settings.json` in the project root with the same content.
 
-#### Qoder（全局）
+#### Qoder — global
 
-编辑 `~/.qoder/settings.json`，在顶层加入 `hooks` 字段：
+Edit `~/.qoder/settings.json` and add a `hooks` key:
 
 ```json
 {
@@ -150,7 +153,7 @@ mkdir -p $env:USERPROFILE\.claude\hooks
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:/Users/<你的用户名>/.claude/hooks/ai_marker.py\""
+            "command": "python \"C:/Users/<username>/.claude/hooks/ai_marker.py\""
           }
         ]
       }
@@ -159,32 +162,42 @@ mkdir -p $env:USERPROFILE\.claude\hooks
 }
 ```
 
-#### Qoder（项目级）
+#### Qoder — project-level
 
-在项目根目录创建 `.qoder/settings.json`，内容同上。
+Create `.qoder/settings.json` in the project root with the same content.
 
-> **注意**：Hook 脚本路径可以统一放在 `~/.claude/hooks/ai_marker.py`，Claude Code 和 Qoder 共用同一个文件，无需复制。
+> Claude Code and Qoder share a single `ai_marker.py` file — no need to copy it.
+
+### Step 3 (optional) — Pin project version
+
+If you prefer a fixed version string over auto-detection, pass `--project-version` in the command:
+
+```json
+"command": "python \"~/.claude/hooks/ai_marker.py\" --project-version v2.1.0"
+```
+
+Priority: `--project-version` arg → version file auto-detection → `v?.?.?`
 
 ---
 
-## 环境变量说明
+## Environment Variables
 
-脚本按以下优先级读取模型名称：
+Model name is resolved in this order (no manual setup needed):
 
 ```
 CLAUDE_MODEL → QODER_MODEL → AI_MODEL → "unknown-model"
 ```
 
-Claude Code 会自动注入 `CLAUDE_MODEL`，Qoder 会自动注入 `QODER_MODEL`，无需手动配置。
+Claude Code injects `CLAUDE_MODEL` automatically; Qoder injects `QODER_MODEL`.
 
 ---
 
-## 项目版本号自动检测
+## Version Auto-Detection
 
-脚本向上遍历最多 6 层目录，依次查找以下文件来获取版本号：
+The script walks up to 6 parent directories looking for:
 
-| 文件 | 适用项目 |
-|------|---------|
+| File | Project type |
+|------|-------------|
 | `package.json` | Node.js |
 | `pom.xml` | Maven |
 | `build.gradle` / `build.gradle.kts` | Gradle |
@@ -192,15 +205,15 @@ Claude Code 会自动注入 `CLAUDE_MODEL`，Qoder 会自动注入 `QODER_MODEL`
 | `gradle.properties` | Gradle |
 | `Cargo.toml` | Rust |
 
-找不到则显示 `v?.?.?`。
+Falls back to `v?.?.?` if none found.
 
 ---
 
-## 验证是否生效
+## Verify It Works
 
-配置完成后，让 AI 修改任意支持语言的文件，检查文件中是否出现 `=== AI ... BEGIN` 标记。
+After configuring, ask the AI to edit any supported file and check for `=== AI ... BEGIN` markers.
 
-也可以手动模拟 Claude Code 调用进行测试：
+You can also run a manual smoke test:
 
 ```bash
 echo '{
