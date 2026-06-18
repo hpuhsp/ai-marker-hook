@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# === AI GENERATED FILE | unknown-model | 2026-06-18 | v?.?.? | DESKTOP-NEC290S\HSP ===
 """
 AI marker injection hook — Claude Code & Qoder compatible.
 Wraps AI-generated/modified code sections with authorship markers.
@@ -85,6 +84,17 @@ MODEL = (os.environ.get('CLAUDE_MODEL')
          or os.environ.get('QODER_MODEL')
          or os.environ.get('AI_MODEL')
          or 'unknown-model')
+
+def _parse_cli_version() -> str | None:
+    args = sys.argv[1:]
+    for i, arg in enumerate(args):
+        if arg == '--project-version' and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith('--project-version='):
+            return arg.split('=', 1)[1]
+    return None
+
+_CLI_VERSION = _parse_cli_version()
 
 def build_header(style: CommentStyle, change_type: str, meta: dict) -> str:
     fields = f" | {meta['model']} | {meta['date']} | {meta['version']} | {change_type.lower()} | {meta['author']}"
@@ -306,7 +316,7 @@ def main():
     meta = {
         'model':   MODEL,
         'date':    TODAY,
-        'version': project_version(file_path),
+        'version': _CLI_VERSION or project_version(file_path),
         'author':  git_author(),
     }
 
