@@ -135,7 +135,7 @@ def find_changed_region(old: str, new: str) -> tuple[int, int]:
 
 # ─────────────────────────── Marker cleanup ───────────────────────────
 
-DATE_RE = re.compile(r'AI \w+ BEGIN\s*\|\s*[^|]+\|\s*(\d{4}-\d{2}-\d{2})\s*\|')
+DATE_RE = re.compile(r'AI \w+ BEGIN\s*\|\s*[^|]+?\|\s*(\d{4}-\d{2}-\d{2})\s*\|')
 CUTOFF = timedelta(days=183)
 _HTML_END_RE = re.compile(r'=== AI \w+ END', re.IGNORECASE)
 
@@ -205,7 +205,7 @@ def extract_active_code(block: str, style: CommentStyle) -> str:
 
 # ─────────────────────────── Write handler ───────────────────────────
 
-def handle_write(file_path: str, tool_input: dict, style: CommentStyle, meta: dict):
+def handle_write(file_path: str, style: CommentStyle, meta: dict):
     content = Path(file_path).read_text(encoding='utf-8')
     lines = content.splitlines(keepends=True)
 
@@ -318,7 +318,7 @@ def main():
 
     try:
         if tool_name == 'Write':
-            handle_write(file_path, tool_input, style, meta)
+            handle_write(file_path, style, meta)
         else:
             handle_edit(file_path, tool_input, style, meta)
     except Exception:
