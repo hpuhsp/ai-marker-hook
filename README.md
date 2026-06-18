@@ -2,45 +2,45 @@
 
 [中文](README.zh.md) | **English**
 
-A `PostToolUse` hook for Claude Code and Qoder that automatically annotates AI-generated or AI-modified code blocks with structured authorship comments — recording the model, date, version, change type, and author. Designed for team AI usage tracking and code traceability.
+A `PostToolUse` hook for Claude Code that automatically annotates AI-generated or AI-modified code blocks with structured authorship comments — recording the model, date, change type, and author. Designed for team AI usage tracking and code traceability.
 
 ---
 
 ## Marker Format
 
-### New file (Write / create_file)
+### New file (Write)
 
 A single file-level header is inserted at the top:
 
 ```java
-// === AI GENERATED FILE | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | Zhang San ===
+// === AI GENERATED FILE | claude-sonnet-4-6 | 2026-06-18 | Zhang San ===
 ```
 
 ### New code block (Edit with no original content)
 
 ```java
-// === AI GENERATED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | generated | Zhang San ===
+// === AI GENERATED BEGIN | claude-sonnet-4-6 | 2026-06-18 | generated | Zhang San ===
 public void newMethod() {
     // ...
 }
 // === AI GENERATED END ===
 ```
 
-### Modified code (change ratio < 80%)
+### Modified code (change ratio < 90%)
 
 ```python
-# === AI MODIFIED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | modified | Zhang San ===
+# === AI MODIFIED BEGIN | claude-sonnet-4-6 | 2026-06-18 | modified | Zhang San ===
 def updated_function():
     pass
 # === AI MODIFIED END ===
 ```
 
-### Major rewrite (change ratio ≥ 80%)
+### Major rewrite (change ratio ≥ 90%)
 
 The original code is commented out inline for easy comparison:
 
 ```python
-# === AI REPLACED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | replaced | Zhang San ===
+# === AI REPLACED BEGIN | claude-sonnet-4-6 | 2026-06-18 | replaced | Zhang San ===
 # [ORIGINAL]
 # def old_function():
 #     old_logic()
@@ -55,15 +55,14 @@ def new_function():
 ## Header Fields
 
 ```
-=== AI {TYPE} BEGIN | {model} | {date} | {version} | {type} | {author} ===
+=== AI {TYPE} BEGIN | {model} | {date} | {type} | {author} ===
 ```
 
 | Field | Description |
 |-------|-------------|
 | `TYPE` | `GENERATED` / `MODIFIED` / `REPLACED` |
-| `model` | AI model name, read from environment variables |
+| `model` | AI model name, read from transcript or `CLAUDE_MODEL` env var |
 | `date` | ISO-format date of the edit |
-| `version` | Project version, auto-detected from version files |
 | `type` | Same as TYPE, lowercase |
 | `author` | `git config user.name` |
 
@@ -114,7 +113,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/hpuhsp/ai-marker-hook/
 
 ### Step 2 — Register the hook
 
-#### Claude Code — global (all projects)
+#### Global (all projects)
 
 Edit `~/.claude/settings.json`:
 
@@ -127,7 +126,7 @@ Edit `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:/Users/<username>/.claude/hooks/ai_marker.py\""
+            "command": "python /path/to/.claude/hooks/ai_marker.py"
           }
         ]
       }
@@ -136,82 +135,29 @@ Edit `~/.claude/settings.json`:
 }
 ```
 
-#### Claude Code — project-level
+#### Project-level
 
 Create `.claude/settings.json` in the project root with the same content.
 
-#### Qoder — global
+### Step 3 (optional) — Fix model name on Windows
 
-Edit `~/.qoder/settings.json` and add a `hooks` key:
+Claude Code may not inject `CLAUDE_MODEL` into hook subprocesses on Windows. Add it explicitly to the `env` section in `~/.claude/settings.json`:
 
 ```json
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|search_replace|create_file",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:/Users/<username>/.claude/hooks/ai_marker.py\""
-          }
-        ]
-      }
-    ]
+  "env": {
+    "CLAUDE_MODEL": "claude-sonnet-4-6"
   }
 }
 ```
 
-#### Qoder — project-level
-
-Create `.qoder/settings.json` in the project root with the same content.
-
-> Claude Code and Qoder share a single `ai_marker.py` file — no need to copy it.
-
-### Step 3 (optional) — Pin project version
-
-If you prefer a fixed version string over auto-detection, pass `--project-version` in the command:
-
-```json
-"command": "python \"~/.claude/hooks/ai_marker.py\" --project-version v2.1.0"
-```
-
-Priority: `--project-version` arg → version file auto-detection → `v?.?.?`
-
----
-
-## Environment Variables
-
-Model name is resolved in this order (no manual setup needed):
-
-```
-CLAUDE_MODEL → QODER_MODEL → AI_MODEL → "unknown-model"
-```
-
-Claude Code injects `CLAUDE_MODEL` automatically; Qoder injects `QODER_MODEL`.
-
----
-
-## Version Auto-Detection
-
-The script walks up to 6 parent directories looking for:
-
-| File | Project type |
-|------|-------------|
-| `package.json` | Node.js |
-| `pom.xml` | Maven |
-| `build.gradle` / `build.gradle.kts` | Gradle |
-| `pyproject.toml` | Python |
-| `gradle.properties` | Gradle |
-| `Cargo.toml` | Rust |
-
-Falls back to `v?.?.?` if none found.
+Update this value when you switch models.
 
 ---
 
 ## Verify It Works
 
-After configuring, ask the AI to edit any supported file and check for `=== AI ... BEGIN` markers.
+After configuring, ask Claude to edit any supported file and check for `=== AI ... BEGIN` markers.
 
 You can also run a manual smoke test:
 

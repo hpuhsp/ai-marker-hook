@@ -2,47 +2,45 @@
 
 **中文** | [English](README.md)
 
-AI 代码标记注入 Hook，兼容 Claude Code 和 Qoder。
-
-当 AI Agent 生成或修改代码后，自动在对应代码块插入结构化标记注释，记录模型、日期、版本、操作类型及作者信息，用于团队 AI 使用度量与代码溯源。
+Claude Code 的 `PostToolUse` Hook，在 AI 生成或修改代码后自动注入结构化标记注释，记录模型、日期、操作类型及作者信息，用于团队 AI 使用度量与代码溯源。
 
 ---
 
 ## 标记格式
 
-### 新建文件（Write / create_file）
+### 新建文件（Write）
 
 在文件顶部插入一行文件级标记：
 
 ```java
-// === AI GENERATED FILE | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | Zhang San ===
+// === AI GENERATED FILE | claude-sonnet-4-6 | 2026-06-18 | Zhang San ===
 ```
 
 ### 新增代码块（Edit，无原始内容）
 
 ```java
-// === AI GENERATED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | generated | Zhang San ===
+// === AI GENERATED BEGIN | claude-sonnet-4-6 | 2026-06-18 | generated | Zhang San ===
 public void newMethod() {
     // ...
 }
 // === AI GENERATED END ===
 ```
 
-### 修改代码（改动 < 80%）
+### 修改代码（改动 < 90%）
 
 ```python
-# === AI MODIFIED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | modified | Zhang San ===
+# === AI MODIFIED BEGIN | claude-sonnet-4-6 | 2026-06-18 | modified | Zhang San ===
 def updated_function():
     pass
 # === AI MODIFIED END ===
 ```
 
-### 大幅重写（改动 ≥ 80%）
+### 大幅重写（改动 ≥ 90%）
 
 原始代码被注释保留，便于对比：
 
 ```python
-# === AI REPLACED BEGIN | claude-sonnet-4-6 | 2026-06-18 | v1.2.0 | replaced | Zhang San ===
+# === AI REPLACED BEGIN | claude-sonnet-4-6 | 2026-06-18 | replaced | Zhang San ===
 # [ORIGINAL]
 # def old_function():
 #     old_logic()
@@ -57,15 +55,14 @@ def new_function():
 ## Header 字段说明
 
 ```
-=== AI {TYPE} BEGIN | {model} | {date} | {version} | {type} | {author} ===
+=== AI {TYPE} BEGIN | {model} | {date} | {type} | {author} ===
 ```
 
 | 字段 | 说明 |
 |------|------|
 | `TYPE` | `GENERATED` / `MODIFIED` / `REPLACED` |
-| `model` | AI 模型名称，自动从环境变量读取 |
+| `model` | AI 模型名称，优先从 transcript 读取，其次读取 `CLAUDE_MODEL` 环境变量 |
 | `date` | 操作日期（ISO 格式） |
-| `version` | 项目版本号，自动从版本文件读取 |
 | `type` | 同 TYPE，小写 |
 | `author` | `git config user.name` |
 
@@ -114,9 +111,9 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/hpuhsp/ai-marker-hook/
   -OutFile "$env:USERPROFILE\.claude\hooks\ai_marker.py"
 ```
 
-### 第二步：配置 Hook
+### 第二步：注册 Hook
 
-#### Claude Code（全局，对所有项目生效）
+#### 全局配置（对所有项目生效）
 
 编辑 `~/.claude/settings.json`：
 
@@ -129,7 +126,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/hpuhsp/ai-marker-hook/
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:/Users/<用户名>/.claude/hooks/ai_marker.py\""
+            "command": "python /path/to/.claude/hooks/ai_marker.py"
           }
         ]
       }
@@ -138,82 +135,29 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/hpuhsp/ai-marker-hook/
 }
 ```
 
-#### Claude Code（项目级，仅对当前项目生效）
+#### 项目级配置（仅对当前项目生效）
 
 在项目根目录创建 `.claude/settings.json`，内容同上。
 
-#### Qoder（全局）
+### 第三步（可选）：修复 Windows 下 model 名称
 
-编辑 `~/.qoder/settings.json`，在顶层加入 `hooks` 字段：
+Claude Code 在 Windows 上可能不会自动将 `CLAUDE_MODEL` 注入 hook 子进程。可在 `~/.claude/settings.json` 的 `env` 节显式配置：
 
 ```json
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|search_replace|create_file",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:/Users/<用户名>/.claude/hooks/ai_marker.py\""
-          }
-        ]
-      }
-    ]
+  "env": {
+    "CLAUDE_MODEL": "claude-sonnet-4-6"
   }
 }
 ```
 
-#### Qoder（项目级）
-
-在项目根目录创建 `.qoder/settings.json`，内容同上。
-
-> Claude Code 和 Qoder 共用同一个 `ai_marker.py` 文件，无需复制。
-
-### 第三步（可选）：固定项目版本号
-
-如果不想依赖自动检测，可在命令中传入 `--project-version` 参数：
-
-```json
-"command": "python \"~/.claude/hooks/ai_marker.py\" --project-version v2.1.0"
-```
-
-优先级：`--project-version` 参数 > 自动检测版本文件 > `v?.?.?`
-
----
-
-## 环境变量说明
-
-脚本按以下优先级读取模型名称，无需手动配置：
-
-```
-CLAUDE_MODEL → QODER_MODEL → AI_MODEL → "unknown-model"
-```
-
-Claude Code 会自动注入 `CLAUDE_MODEL`，Qoder 会自动注入 `QODER_MODEL`。
-
----
-
-## 项目版本号自动检测
-
-脚本向上遍历最多 6 层目录，依次查找以下文件：
-
-| 文件 | 适用项目 |
-|------|---------|
-| `package.json` | Node.js |
-| `pom.xml` | Maven |
-| `build.gradle` / `build.gradle.kts` | Gradle |
-| `pyproject.toml` | Python |
-| `gradle.properties` | Gradle |
-| `Cargo.toml` | Rust |
-
-找不到则显示 `v?.?.?`。
+切换模型时同步更新此值即可。
 
 ---
 
 ## 验证是否生效
 
-配置完成后，让 AI 修改任意支持语言的文件，检查文件中是否出现 `=== AI ... BEGIN` 标记。
+配置完成后，让 Claude 修改任意支持语言的文件，检查文件中是否出现 `=== AI ... BEGIN` 标记。
 
 也可以手动模拟测试：
 
