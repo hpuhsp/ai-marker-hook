@@ -44,6 +44,22 @@ def get_style(file_path: str) -> CommentStyle | None:
 
 # ─────────────────────────── Metadata ───────────────────────────
 
+def model_from_transcript(transcript_path: str) -> str | None:
+    try:
+        lines = Path(transcript_path).read_text(encoding='utf-8').splitlines()
+        for line in reversed(lines[-30:]):
+            try:
+                entry = json.loads(line)
+                model = (entry.get('model')
+                         or entry.get('message', {}).get('model'))
+                if model:
+                    return model
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
 def git_author() -> str:
     try:
         r = subprocess.run(['git', 'config', 'user.name'],
@@ -294,7 +310,8 @@ def main():
     if not Path(file_path).exists():
         return
 
-    model = (os.environ.get('CLAUDE_MODEL')
+    model = (model_from_transcript(data.get('transcript_path', ''))
+             or os.environ.get('CLAUDE_MODEL')
              or os.environ.get('QODER_MODEL')
              or os.environ.get('AI_MODEL')
              or 'claude')
