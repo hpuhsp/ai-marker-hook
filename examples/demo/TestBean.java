@@ -27,8 +27,11 @@ public class TestBean {
         this.age = age;
     }
 
+// === AI MODIFIED BEGIN | unknown-model | 2026-06-18 | v?.?.? | modified | DESKTOP-NEC290S\HSP ===
     @Override
     public String toString() {
-        return "TestBean{name='" + name + "', age=" + age + "}";
+        return String.format("TestBean{name='%s', age=%d}", name, age);
     }
+// === AI MODIFIED END ===
+
 }
