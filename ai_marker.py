@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI marker injection hook — Claude Code & Qoder compatible.
+AI marker injection hook for Claude Code.
 Wraps AI-generated/modified code sections with authorship markers.
 """
 
@@ -116,7 +116,6 @@ def change_ratio(old: str, new: str) -> float:
     return 1.0 - kept / len(old_lines)
 
 def find_changed_region(old: str, new: str) -> tuple[int, int]:
-    """Return char offsets (start, end) within `new` spanning only the changed lines."""
     old_lines = old.splitlines(keepends=True)
     new_lines = new.splitlines(keepends=True)
     matcher = difflib.SequenceMatcher(None, old_lines, new_lines)
@@ -148,7 +147,6 @@ def _marker_pat(style: CommentStyle, which: str) -> re.Pattern:
     return re.compile(rf'^{esc}\s*=== AI \w+ {which}.*===$', re.MULTILINE | re.IGNORECASE)
 
 def find_enclosing_marker(content: str, pos: int, style: CommentStyle) -> tuple | None:
-    """Return (begin_start, end_end, marker_date) if pos is inside an AI marker block."""
     candidates = [(m.start(), m.end(), m.group())
                   for m in _marker_pat(style, 'BEGIN').finditer(content) if m.start() <= pos]
     if not candidates:
@@ -177,7 +175,6 @@ def find_enclosing_marker(content: str, pos: int, style: CommentStyle) -> tuple 
     return (b_start, e_end, marker_date)
 
 def extract_active_code(block: str, style: CommentStyle) -> str:
-    """Strip marker header/footer and [ORIGINAL] section, keeping only the active code."""
     lines = block.splitlines(keepends=True)
     result = []
     in_original = False
@@ -231,8 +228,8 @@ def handle_write(file_path: str, tool_input: dict, style: CommentStyle, meta: di
 # ─────────────────────────── Edit handler ───────────────────────────
 
 def handle_edit(file_path: str, tool_input: dict, style: CommentStyle, meta: dict):
-    old_str: str = tool_input.get('old_string') or tool_input.get('old_content', '') or ''
-    new_str: str = tool_input.get('new_string') or tool_input.get('new_content', '') or ''
+    old_str: str = tool_input.get('old_string', '') or ''
+    new_str: str = tool_input.get('new_string', '') or ''
 
     if not new_str:
         return
@@ -249,7 +246,7 @@ def handle_edit(file_path: str, tool_input: dict, style: CommentStyle, meta: dic
     if enclosing is not None:
         b_start, e_end, marker_date = enclosing
         if TODAY_DATE - marker_date <= CUTOFF:
-            return  # inside fresh marker — don't nest
+            return
         block = content[b_start:e_end]
         content = content[:b_start] + extract_active_code(block, style) + content[e_end:]
         occurrences = [m.start() for m in re.finditer(re.escape(new_str), content)]
@@ -274,40 +271,19 @@ def handle_edit(file_path: str, tool_input: dict, style: CommentStyle, meta: dic
 
 # ─────────────────────────── Entry point ───────────────────────────
 
-_EXCLUDED_DIRS = [Path.home() / '.claude', Path.home() / '.qoder']
-
-_TOOL_WRITE = {'Write', 'create_file'}
-_TOOL_EDIT  = {'Edit', 'search_replace'}
-
-def _read_input() -> dict:
-    # Primary: stdin JSON (Claude Code & Qoder both use this)
-    try:
-        if not sys.stdin.isatty():
-            raw = sys.stdin.buffer.read().decode('utf-8', errors='replace').strip()
-            if raw:
-                return json.loads(raw)
-    except Exception:
-        pass
-    # Fallback: Qoder env vars (when stdin pipe behaves unexpectedly on Windows)
-    tool_name = os.environ.get('QODER_TOOL_NAME', '')
-    file_path = os.environ.get('QODER_TOOL_INPUT_FILE_PATH', '')
-    if tool_name and file_path:
-        return {
-            'tool_name': tool_name,
-            'tool_input': {'file_path': file_path},
-            'transcript_path': os.environ.get('QODER_TRANSCRIPT_PATH', ''),
-        }
-    return {}
+_EXCLUDED_DIRS = [Path.home() / '.claude']
 
 def main():
-    data = _read_input()
-    if not data:
+    try:
+        raw = sys.stdin.buffer.read().decode('utf-8', errors='replace').strip()
+        data = json.loads(raw)
+    except Exception:
         return
 
     tool_name: str = data.get('tool_name', '')
     tool_input: dict = data.get('tool_input', {})
 
-    if tool_name not in (_TOOL_WRITE | _TOOL_EDIT):
+    if tool_name not in ('Write', 'Edit'):
         return
 
     file_path: str = tool_input.get('file_path', '')
@@ -331,7 +307,6 @@ def main():
 
     model = (model_from_transcript(data.get('transcript_path', ''))
              or os.environ.get('CLAUDE_MODEL')
-             or os.environ.get('QODER_MODEL')
              or os.environ.get('AI_MODEL')
              or 'claude')
 
@@ -342,9 +317,9 @@ def main():
     }
 
     try:
-        if tool_name in _TOOL_WRITE:
+        if tool_name == 'Write':
             handle_write(file_path, tool_input, style, meta)
-        elif tool_name in _TOOL_EDIT:
+        else:
             handle_edit(file_path, tool_input, style, meta)
     except Exception:
         pass
