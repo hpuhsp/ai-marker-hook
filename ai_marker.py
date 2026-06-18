@@ -243,7 +243,7 @@ def handle_edit(file_path: str, tool_input: dict, style: CommentStyle, meta: dic
 
     if not old_str:
         marked = wrap_block(new_str, style, 'GENERATED', meta)
-    elif change_ratio(old_str, new_str) >= 0.8:
+    elif change_ratio(old_str, new_str) >= 0.9:
         marked = wrap_replaced(old_str, new_str, style, meta)
     else:
         c_start, c_end = find_changed_region(old_str, new_str)
