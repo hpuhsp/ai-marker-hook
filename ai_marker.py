@@ -279,10 +279,29 @@ _EXCLUDED_DIRS = [Path.home() / '.claude', Path.home() / '.qoder']
 _TOOL_WRITE = {'Write', 'create_file'}
 _TOOL_EDIT  = {'Edit', 'search_replace'}
 
-def main():
+def _read_input() -> dict:
+    # Primary: stdin JSON (Claude Code & Qoder both use this)
     try:
-        data = json.load(sys.stdin)
+        if not sys.stdin.isatty():
+            raw = sys.stdin.buffer.read().decode('utf-8', errors='replace').strip()
+            if raw:
+                return json.loads(raw)
     except Exception:
+        pass
+    # Fallback: Qoder env vars (when stdin pipe behaves unexpectedly on Windows)
+    tool_name = os.environ.get('QODER_TOOL_NAME', '')
+    file_path = os.environ.get('QODER_TOOL_INPUT_FILE_PATH', '')
+    if tool_name and file_path:
+        return {
+            'tool_name': tool_name,
+            'tool_input': {'file_path': file_path},
+            'transcript_path': os.environ.get('QODER_TRANSCRIPT_PATH', ''),
+        }
+    return {}
+
+def main():
+    data = _read_input()
+    if not data:
         return
 
     tool_name: str = data.get('tool_name', '')
